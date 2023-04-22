@@ -1,6 +1,7 @@
 use reqwest;
 use serde::{Serialize, Deserialize};
 use confy;
+use std::time::{Duration, Instant};
 
 use super::data::*;
 
@@ -28,10 +29,17 @@ impl From<confy::ConfyError> for Error {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct AccessToken {
+struct AccessTokenJSON {
   access_token : String,
   refresh_token : String,
   expires_in : i32,
+}
+
+#[derive(Debug)]
+pub struct AccessToken {
+  access_token : String,
+  refresh_token : String,
+  pub expires_at : Instant,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -50,6 +58,16 @@ impl ::std::default::Default for ConnectConfig  {
     }
 }
 
+fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
+  if token.expires_in < 0 {
+    return Err( Error::from( format!("received expires_in field in AccessToken is negative!: {}", token.expires_in ) ) );
+  }
+
+  let expires_at  = Instant::now() + Duration::from_secs( token.expires_in.try_into().unwrap() );
+
+  Ok( AccessToken{ access_token : token.access_token, refresh_token : token.refresh_token, expires_at } )
+}
+
 pub async fn get_access_token(client : &reqwest::Client, cfg : &ConnectConfig)
   -> Result<AccessToken, Error> {
 
@@ -65,9 +83,9 @@ pub async fn get_access_token(client : &reqwest::Client, cfg : &ConnectConfig)
     return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
   }
 
-  let res = res.json::<AccessToken>().await?;
+  let res = res.json::<AccessTokenJSON>().await?;
 
-  return Ok( res );
+  convert_token(res)
 }
 
 pub async fn get_stations_data(client : &reqwest::Client, token : &AccessToken)
@@ -85,4 +103,23 @@ pub async fn get_stations_data(client : &reqwest::Client, token : &AccessToken)
    let res = res.json::<StationsData>().await?;
 
    Ok( res )
+}
+
+pub async fn get_fresh_token(client : &reqwest::Client, cfg : &ConnectConfig, old_token: &AccessToken)
+    -> Result<AccessToken, Error> {
+
+  let params = [("grant_type", "refresh_token"),
+                          ("refresh_token", &old_token.refresh_token),
+                          ("client_id", &cfg.client_id),
+                          ("client_secret", &cfg.client_secret)];
+
+  let res = client.post("https://api.netatmo.com/oauth2/token").form(&params).send().await?;
+
+  if ! res.status().is_success()  {
+    return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
+  }
+
+  let res = res.json::<AccessTokenJSON>().await?;
+
+  convert_token( res )
 }

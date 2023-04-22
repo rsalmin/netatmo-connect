@@ -2,6 +2,7 @@ use reqwest;
 use tokio;
 use chrono::naive::NaiveDateTime;
 use confy;
+use std::time::{Duration, Instant};
 
 mod netatmo;
 use netatmo::*;
@@ -21,25 +22,42 @@ async fn main_wrapped() -> Result<(), Error> {
 
   let client = reqwest::Client::new();
 
-  let token =  get_access_token(&client, &cfg).await?;
+  let mut token =  get_access_token(&client, &cfg).await?;
 
-  let res = get_stations_data(&client, &token).await?;
+  let token_duration = token.expires_at - Instant::now();
+  println!("Access token expires in {:?}", token_duration);
 
-   let time_server = NaiveDateTime::from_timestamp_opt(res.time_server, 0);
-   match time_server {
-     None => println!("Failed to convert server time to NaiveDateTime"),
-     Some( v ) => println!("server naive date time: {}", v),
-   };
+  loop {
 
-   for d in res.body.devices {
-     println!("Device id : {}", d._id);
-     println!("data : {}", d.dashboard_data);
-     for m in d.modules {
-       println!("  Module : {}", m._id);
-       println!("  Battery : {}%", m.battery_percent);
-       println!("  data : {}", m.dashboard_data);
+    if token.expires_at < Instant::now() {
+      println!("Access token is expired!!!");
+      token = get_fresh_token(&client, &cfg, &token).await?;
+    }
+
+    let res = get_stations_data(&client, &token).await?;
+
+     let time_server = NaiveDateTime::from_timestamp_opt(res.time_server, 0);
+     match time_server {
+       None => println!("Failed to convert server time to NaiveDateTime"),
+       Some( v ) => println!("server naive date time: {}", v),
+     };
+
+     for d in res.body.devices {
+       println!("Device id : {}", d._id);
+       println!("data : {}", d.dashboard_data);
+       for m in d.modules {
+         println!("  Module : {}", m._id);
+         println!("  Battery : {}%", m.battery_percent);
+         println!("  data : {}", m.dashboard_data);
+       }
+     };
+
+     if token.expires_at < Instant::now() {
+       println!("Access token is expired!!!");
      }
+     tokio::time::sleep(Duration::from_secs(60)).await;
    };
-   Ok(())
+
+   //Ok(())
 }
 
