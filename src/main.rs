@@ -4,8 +4,7 @@ use chrono::naive::NaiveDateTime;
 use confy;
 use std::time::{Duration, Instant};
 
-mod netatmo;
-use netatmo::*;
+use netatmo_connect::*;
 
 #[tokio::main]
 async fn main() {
