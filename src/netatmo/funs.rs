@@ -10,6 +10,12 @@ pub struct Error {
   pub msg : String,
 }
 
+impl From<Error> for String {
+  fn from(e : Error) -> String {
+    e.msg
+  }
+}
+
 impl From<reqwest::Error> for Error {
   fn from(e : reqwest::Error) -> Error {
     Error { msg : format!("{:?}", e) }
@@ -42,7 +48,7 @@ pub struct AccessToken {
   pub expires_at : Instant,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ConnectConfig {
     client_id: String,
     client_secret: String,
