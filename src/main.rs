@@ -19,9 +19,11 @@ async fn main_wrapped() -> Result<(), Error> {
 
   let cfg  = confy::load("connect-config", None)?;
 
+  let timeout  = Some( Duration::from_secs(1) );
+
   let client = reqwest::Client::new();
 
-  let mut token =  get_access_token(&client, &cfg).await?;
+  let mut token =  get_access_token(&client, &cfg, &timeout).await?;
 
   let token_duration = token.expires_at - Instant::now();
   println!("Access token expires in {:?}", token_duration);
@@ -30,10 +32,10 @@ async fn main_wrapped() -> Result<(), Error> {
 
     if token.expires_at < Instant::now() {
       println!("Access token is expired!!!");
-      token = get_fresh_token(&client, &cfg, &token).await?;
+      token = get_fresh_token(&client, &cfg, &token, &timeout).await?;
     }
 
-    let res = get_stations_data(&client, &token).await?;
+    let res = get_stations_data(&client, &token, &timeout).await?;
 
      let time_server = NaiveDateTime::from_timestamp_opt(res.time_server, 0);
      match time_server {
@@ -42,18 +44,28 @@ async fn main_wrapped() -> Result<(), Error> {
      };
 
      for d in res.body.devices {
-       println!("Device id : {}", d._id);
-       println!("data : {}", d.dashboard_data);
+       println!("data from device id : {}", d._id);
+       println!("{}", d.dashboard_data);
        for m in d.modules {
-         println!("  Module : {}", m._id);
-         println!("  Battery : {}%", m.battery_percent);
-         println!("  data : {}", m.dashboard_data);
+         println!("  with module : {}", m._id);
+         println!("      Battery : {}%", m.battery_percent);
+         println!("      data : {}", m.dashboard_data);
        }
      };
+
+     let hc_data = get_homecoachs_data(&client, &token, &timeout ).await?;
+
+     for d in hc_data.body.devices {
+         println!("data from {}", d.station_name);
+         println!("{}", d.dashboard_data);
+     };
+
 
      if token.expires_at < Instant::now() {
        println!("Access token is expired!!!");
      }
+
+
      tokio::time::sleep(Duration::from_secs(60)).await;
    };
 

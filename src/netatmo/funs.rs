@@ -68,44 +68,52 @@ fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
   Ok( AccessToken{ access_token : token.access_token, refresh_token : token.refresh_token, expires_at } )
 }
 
-pub async fn get_access_token(client : &reqwest::Client, cfg : &ConnectConfig)
+async fn apply_timeout_and_send(mut build : reqwest::RequestBuilder, timeout : &Option<Duration>) -> Result<reqwest::Response, Error>
+{
+    if let Some( d ) = timeout {
+        build = build.timeout(*d);
+    }
+    let res = build.send().await?;
+    if ! res.status().is_success()  {
+        return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
+    }
+    Ok( res )
+}
+
+pub async fn get_access_token(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>)
   -> Result<AccessToken, Error> {
 
   let params = [("grant_type", "password"),
                           ("client_id", &cfg.client_id),
                           ("client_secret", &cfg.client_secret),
                           ("username", &cfg.username),
-                          ("password", &cfg.password)];
+                          ("password", &cfg.password),
+                          ("scope", "read_station read_homecoach")];
 
-  let res = client.post("https://api.netatmo.com/oauth2/token").form(&params).send().await?;
+  let build = client.post("https://api.netatmo.com/oauth2/token").form(&params);
 
-  if ! res.status().is_success()  {
-    return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
-  }
+  let res = apply_timeout_and_send(build, timeout).await?;
 
   let res = res.json::<AccessTokenJSON>().await?;
 
   convert_token(res)
 }
 
-pub async fn get_stations_data(client : &reqwest::Client, token : &AccessToken)
+pub async fn get_stations_data(client : &reqwest::Client, token : &AccessToken, timeout : &Option<Duration>)
   -> Result<StationsData, Error> {
 
   //let params = [("device_id", "04255185")];
-  let res = client.get("https://api.netatmo.com/api/getstationsdata")
-    .header("Authorization", String::from("Bearer ") + &token.access_token)
-    .send().await?;
+  let build = client.get("https://api.netatmo.com/api/getstationsdata")
+    .header("Authorization", String::from("Bearer ") + &token.access_token);
 
-  if ! res.status().is_success()  {
-    return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
-  }
+  let res = apply_timeout_and_send(build, timeout).await?;
 
    let res = res.json::<StationsData>().await?;
 
    Ok( res )
 }
 
-pub async fn get_fresh_token(client : &reqwest::Client, cfg : &ConnectConfig, old_token: &AccessToken)
+pub async fn get_fresh_token(client : &reqwest::Client, cfg : &ConnectConfig, old_token: &AccessToken, timeout : &Option<Duration>)
     -> Result<AccessToken, Error> {
 
   let params = [("grant_type", "refresh_token"),
@@ -113,13 +121,27 @@ pub async fn get_fresh_token(client : &reqwest::Client, cfg : &ConnectConfig, ol
                           ("client_id", &cfg.client_id),
                           ("client_secret", &cfg.client_secret)];
 
-  let res = client.post("https://api.netatmo.com/oauth2/token").form(&params).send().await?;
+  let build = client.post("https://api.netatmo.com/oauth2/token").form(&params);
 
-  if ! res.status().is_success()  {
-    return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
-  }
+  let res = apply_timeout_and_send(build, timeout).await?;
 
   let res = res.json::<AccessTokenJSON>().await?;
 
   convert_token( res )
 }
+
+pub async fn get_homecoachs_data(client : &reqwest::Client, token : &AccessToken, timeout : &Option<Duration>)
+  -> Result<HomeCoachsData, Error> {
+
+  //let params = [("device_id", "04255185")];
+  let build = client.get("https://api.netatmo.com/api/gethomecoachsdata")
+    .header("Authorization", String::from("Bearer ") + &token.access_token)
+    .header("accept", "application/json");
+
+  let res = apply_timeout_and_send(build, timeout).await?;
+
+   let res = res.json::<HomeCoachsData>().await?;
+
+   Ok( res )
+}
+

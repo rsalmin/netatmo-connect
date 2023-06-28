@@ -80,3 +80,51 @@ impl fmt::Display for StationsDataDeviceData {
     }
 }
 
+#[derive(Deserialize, Debug)]
+pub struct HomeCoachsData {
+  pub body : HomeCoachsDataBody,
+  pub time_server : i64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HomeCoachsDataBody {
+  pub devices : Vec<HomeCoachsDataDevice>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HomeCoachsDataDevice {
+  pub _id : String,
+  pub station_name : String,
+  pub dashboard_data : HomeCoachsDeviceData,
+}
+
+#[allow(non_snake_case)]
+#[derive(Deserialize, Debug)]
+pub struct HomeCoachsDeviceData {
+  pub time_utc: i64,
+  pub Temperature : f32,
+  pub CO2 : i32,
+  pub Humidity : i32,
+  pub Noise : i32,
+  pub Pressure: f32,
+  pub AbsolutePressure : f32,
+  pub health_idx : i32,
+}
+
+impl fmt::Display for HomeCoachsDeviceData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+       let time = NaiveDateTime::from_timestamp_opt(self.time_utc, 0);
+       match time {
+         None => write!(f, "Failed to convert time from {}", self.time_utc)?,
+         Some( v ) => write!(f, "Time: {}", v)?,
+        };
+        write!(f, "  Temperature: {}", self.Temperature)?;
+        write!(f, "  CO2: {}", self.CO2)?;
+        write!(f, "  Humidity: {}%", self.Humidity)?;
+        write!(f, "  Noise: {}db", self.Noise)?;
+        write!(f, "  Pressure: {}mmHg", self.Pressure)?;
+        write!(f, "  AbsolutePressure: {}", self.AbsolutePressure)?;
+        write!(f, "  health_idx: {}", self.health_idx)?;
+        Ok(())
+    }
+}
