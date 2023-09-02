@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use chrono::naive::NaiveDateTime;
 use std::fmt;
 
@@ -126,5 +126,23 @@ impl fmt::Display for HomeCoachsDeviceData {
         write!(f, "  AbsolutePressure: {}", self.AbsolutePressure)?;
         write!(f, "  health_idx: {}", self.health_idx)?;
         Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ConnectConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub username: String,
+    pub password: String,
+    pub arbitrary_but_unique_string: String,
+}
+
+/// Default for initial save ;)
+impl ::std::default::Default for ConnectConfig  {
+    fn default() -> Self {
+     Self { client_id: "cliend_id".into(), client_secret : "client_secret".into(),
+                username : "username".into(), password : "password".into(),
+                arbitrary_but_unique_string : "arbitrary_not_so_unique_string".into(), }
     }
 }
