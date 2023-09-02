@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use webbrowser;
 use actix_web::{get, web, App, HttpServer};
 use actix_web::{HttpResponse, Responder};
+use actix_web::dev::ServerHandle;
 use std::sync::{RwLock, Arc};
 
 use super::data::*;
@@ -33,7 +34,8 @@ struct AuthRespParams {
 #[derive(Clone)]
 struct SharedWebData {
     state: String,
-    code: String
+    code: String,
+    server_handle: Option<ServerHandle>,
 }
 
 #[get("/api/authorization_response")]
@@ -59,7 +61,6 @@ async fn authorization_response_handler(params : web::Query<AuthRespParams>, dat
     HttpResponse::Ok().finish()
 }
 
-#[tokio::main]
 async fn wait_for_response_web_task(data : Arc<RwLock<SharedWebData>>)
 {
     match wait_for_response_web_task_pure(data).await {
@@ -78,13 +79,40 @@ async fn wait_for_response_web_task_pure(data : Arc<RwLock<SharedWebData>>) -> R
             .app_data( web::Data::new( data2.clone() ) )
     })
     .workers(1)
-    .bind(("127.0.0.1", 8000))?;
+    .bind(("127.0.0.1", 8000))?.run();
 
-    let () = server.run().await?;
+    let server_handle = server.handle();
+
+    {
+        let mut internal_data = data.write()?;
+
+        //set server_handle here, therefore when server will be run it will be already set!
+        internal_data.server_handle = Some( server_handle );
+    }
+
+    //run server
+    let () = server.await?;
 
     println!("Server finished data.code = {}", data.read()?.code);
 
     Ok(String::new())
+}
+
+async fn wait_for_finish(data : Arc<RwLock<SharedWebData>>) -> Result<(), Error>
+{
+    loop {
+            let mut server_handle : Option<ServerHandle> = None;
+            if let Ok( internal_data ) = data.read() {
+                if ! internal_data.code.is_empty() {
+                    server_handle = Some( internal_data.server_handle.clone().expect("server handle already set") );
+                }
+            }
+            if let Some( handle ) = server_handle {
+                handle.stop(true).await; //gracefully
+                return Ok(())
+            }
+        tokio::time::sleep( Duration::from_millis(200) ).await;
+    }
 }
 
 pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>)
@@ -101,12 +129,23 @@ pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout 
     let data = Arc::new(RwLock::new(SharedWebData {
         state : cfg.arbitrary_but_unique_string.clone() ,
         code : String::new(),
+        server_handle : None,
     }));
-    let ws_handler = std::thread::spawn( || wait_for_response_web_task( data ) );
+
+    let ws_handle = tokio::task::spawn( wait_for_response_web_task( data.clone() ) );
+    let wait_handle = tokio::task::spawn( wait_for_finish( data ) );
 
     webbrowser::open(url.as_str())?;
 
-    let _ = ws_handler.join();
+    match ws_handle.await {
+        Err( e ) => log::warn!("webbrowser task failed with {:?}", e),
+        Ok( _ ) => () ,
+    };
+
+    match wait_handle.await {
+        Err( e ) => log::warn!("wait  task failed with {:?}", e),
+        Ok( o ) => o? ,
+    };
 
   //let build = client.post(url);
 
