@@ -9,7 +9,7 @@ use netatmo_connect::*;
 #[tokio::main]
 async fn main() {
   if let Err( e ) =  main_wrapped().await {
-    println!("Error : {:?}", e);
+    println!("Exit: {:?}", e);
   }
 }
 
@@ -23,7 +23,10 @@ async fn main_wrapped() -> Result<(), Error> {
 
   let client = reqwest::Client::new();
 
-  let mut token =  get_access_token(&client, &cfg, &timeout).await?;
+  authorize(&client, &cfg, &Option::None).await?;
+
+
+  let mut token =  get_client_access_token(&client, &cfg, &timeout).await?;
 
   let token_duration = token.expires_at - Instant::now();
   println!("Access token expires in {:?}", token_duration);
