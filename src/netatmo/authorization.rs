@@ -1,6 +1,6 @@
 use reqwest;
 use serde::Deserialize;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use webbrowser;
 use actix_web::{get, web, App, HttpServer};
 use actix_web::{HttpResponse, Responder};
@@ -9,21 +9,7 @@ use std::sync::{RwLock, Arc};
 
 use super::data::*;
 use super::errors::*;
-
-#[derive(Deserialize, Debug)]
-struct AccessTokenJSON {
-  access_token : String,
-  refresh_token : String,
-  expires_in : i32,
-}
-
-#[derive(Debug)]
-pub struct AccessToken {
-  access_token : String,
-  refresh_token : String,
-  pub expires_at : Instant,
-}
-
+use super::funs::{apply_timeout_and_send, convert_token, AccessToken, AccessTokenJSON};
 
 #[derive(Deserialize)]
 struct AuthRespParams {
@@ -40,8 +26,6 @@ struct SharedWebData {
 
 #[get("/api/authorization_response")]
 async fn authorization_response_handler(params : web::Query<AuthRespParams>, data : web::Data<Arc<RwLock<SharedWebData>>>) -> impl Responder {
-
-    println!("Helo I am here! ");
 
     if let Ok( data ) = data.read() {
         if data.state != params.state {
@@ -61,15 +45,7 @@ async fn authorization_response_handler(params : web::Query<AuthRespParams>, dat
     HttpResponse::Ok().finish()
 }
 
-async fn wait_for_response_web_task(data : Arc<RwLock<SharedWebData>>)
-{
-    match wait_for_response_web_task_pure(data).await {
-        Err ( e ) => println!("Error {:?}", e),
-        Ok( _ ) => println!("Ok"),
-    }
-}
-
-async fn wait_for_response_web_task_pure(data : Arc<RwLock<SharedWebData>>) -> Result<String, Error>
+async fn wait_for_response_web_task(data : Arc<RwLock<SharedWebData>>) -> Result<String, Error>
 {
 
     let data2 = data.clone();
@@ -93,9 +69,7 @@ async fn wait_for_response_web_task_pure(data : Arc<RwLock<SharedWebData>>) -> R
     //run server
     let () = server.await?;
 
-    println!("Server finished data.code = {}", data.read()?.code);
-
-    Ok(String::new())
+    Ok( data.read()?.code.clone() )
 }
 
 async fn wait_for_finish(data : Arc<RwLock<SharedWebData>>) -> Result<(), Error>
@@ -115,9 +89,8 @@ async fn wait_for_finish(data : Arc<RwLock<SharedWebData>>) -> Result<(), Error>
     }
 }
 
-pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>)
-  -> Result<(), Error> {
-
+async fn get_code_string(cfg : &ConnectConfig) -> Result<String, Error>
+{
     let params = [("client_id", &cfg.client_id),
                           ("redirect_uri", &String::from("http://localhost:8000/api/authorization_response")),
                           ("scope", &String::from("read_station read_homecoach")),
@@ -137,21 +110,29 @@ pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout 
 
     webbrowser::open(url.as_str())?;
 
-    match ws_handle.await {
-        Err( e ) => log::warn!("webbrowser task failed with {:?}", e),
-        Ok( _ ) => () ,
-    };
+    wait_handle.await??;
+    ws_handle.await?
+}
 
-    match wait_handle.await {
-        Err( e ) => log::warn!("wait  task failed with {:?}", e),
-        Ok( o ) => o? ,
-    };
+pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>) -> Result<AccessToken, Error>
+{
+    let code_string = get_code_string(cfg).await?;
 
-  //let build = client.post(url);
+    log::info!("got code string {}", code_string);
 
-  //let res = apply_timeout_and_send(build, timeout).await?;
+    let params = [("grant_type", "authorization_code"),
+                            ("client_id", &cfg.client_id),
+                            ("client_secret", &cfg.client_secret),
+                            ("code", &code_string),
+                            ("scope", "read_station read_homecoach")];
+
+  let build = client.post("https://api.netatmo.com/oauth2/token").form(&params);
+
+  let res = apply_timeout_and_send(build, timeout).await?;
 
   //println!("authorization reply: {} {}", res.status(), res.text().await?);
 
-  Ok(())
+  let res = res.json::<AccessTokenJSON>().await?;
+
+  convert_token(res)
 }

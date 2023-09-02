@@ -23,10 +23,10 @@ async fn main_wrapped() -> Result<(), Error> {
 
   let client = reqwest::Client::new();
 
-  authorize(&client, &cfg, &Option::None).await?;
+  let mut token =  authorize(&client, &cfg, &Option::None).await?;
 
 
-  let mut token =  get_client_access_token(&client, &cfg, &timeout).await?;
+  //get_client_access_token(&client, &cfg, &timeout).await?;
 
   let token_duration = token.expires_at - Instant::now();
   println!("Access token expires in {:?}", token_duration);

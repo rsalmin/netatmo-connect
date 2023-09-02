@@ -1,6 +1,7 @@
 use reqwest;
 use confy;
 use url;
+use tokio::task::JoinError;
 
 #[derive(Debug)]
 pub struct Error {
@@ -27,6 +28,12 @@ impl From<url::ParseError> for Error {
 
 impl From<std::io::Error> for Error {
   fn from(e : std::io::Error) -> Error {
+    Error { msg : format!("{:?}", e) }
+  }
+}
+
+impl From<JoinError> for Error {
+  fn from(e : JoinError) -> Error {
     Error { msg : format!("{:?}", e) }
   }
 }

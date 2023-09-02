@@ -6,7 +6,7 @@ use super::data::*;
 use super::errors::*;
 
 #[derive(Deserialize, Debug)]
-struct AccessTokenJSON {
+pub struct AccessTokenJSON {
   access_token : String,
   refresh_token : String,
   expires_in : i32,
@@ -19,7 +19,7 @@ pub struct AccessToken {
   pub expires_at : Instant,
 }
 
-fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
+pub fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
   if token.expires_in < 0 {
     return Err( Error::from( format!("received expires_in field in AccessToken is negative!: {}", token.expires_in ) ) );
   }
@@ -29,7 +29,7 @@ fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
   Ok( AccessToken{ access_token : token.access_token, refresh_token : token.refresh_token, expires_at } )
 }
 
-async fn apply_timeout_and_send(mut build : reqwest::RequestBuilder, timeout : &Option<Duration>) -> Result<reqwest::Response, Error>
+pub async fn apply_timeout_and_send(mut build : reqwest::RequestBuilder, timeout : &Option<Duration>) -> Result<reqwest::Response, Error>
 {
     if let Some( d ) = timeout {
         build = build.timeout(*d);
