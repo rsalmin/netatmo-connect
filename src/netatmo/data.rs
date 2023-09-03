@@ -95,7 +95,7 @@ pub struct HomeCoachsDataBody {
 pub struct HomeCoachsDataDevice {
   pub _id : String,
   pub station_name : String,
-  pub dashboard_data : HomeCoachsDeviceData,
+  pub dashboard_data : Option<HomeCoachsDeviceData>,
 }
 
 #[allow(non_snake_case)]

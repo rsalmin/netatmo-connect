@@ -94,17 +94,15 @@ pub async fn get_fresh_token(client : &reqwest::Client, cfg : &ConnectConfig, ol
 }
 
 pub async fn get_homecoachs_data(client : &reqwest::Client, token : &AccessToken, timeout : &Option<Duration>)
-  -> Result<HomeCoachsData, Error> {
+  -> Result<HomeCoachsData, Error>
+{
+    let build = client.get("https://api.netatmo.com/api/gethomecoachsdata")
+        .header("Authorization", String::from("Bearer ") + &token.access_token)
+        .header("accept", "application/json");
 
-  //let params = [("device_id", "04255185")];
-  let build = client.get("https://api.netatmo.com/api/gethomecoachsdata")
-    .header("Authorization", String::from("Bearer ") + &token.access_token)
-    .header("accept", "application/json");
+    let res = apply_timeout_and_send(build, timeout).await?;
 
-  let res = apply_timeout_and_send(build, timeout).await?;
+    let res = res.json::<HomeCoachsData>().await?;
 
-   let res = res.json::<HomeCoachsData>().await?;
-
-   Ok( res )
+    Ok( res )
 }
-

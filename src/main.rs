@@ -45,25 +45,33 @@ async fn main_wrapped() -> Result<(), Error> {
 
      let time_server = NaiveDateTime::from_timestamp_opt(res.time_server, 0);
      match time_server {
-       None => println!("Failed to convert server time to NaiveDateTime"),
-       Some( v ) => println!("server naive date time: {}", v),
+       None => log::error!("Failed to convert server time to NaiveDateTime"),
+       Some( v ) => log::info!("server naive date time: {}", v),
      };
 
      for d in res.body.devices {
        println!("data from device id : {}", d._id);
-       println!("{}", d.dashboard_data);
+       println!("    {}", d.dashboard_data);
        for m in d.modules {
-         println!("  with module : {}", m._id);
-         println!("      Battery : {}%", m.battery_percent);
-         println!("      data : {}", m.dashboard_data);
+         println!("    with module : {}", m._id);
+         println!("        Battery : {}%", m.battery_percent);
+         println!("        data : {}", m.dashboard_data);
        }
      };
 
-     let hc_data = get_homecoachs_data(&client, &token, &timeout ).await?;
-
-     for d in hc_data.body.devices {
-         println!("data from {}", d.station_name);
-         println!("{}", d.dashboard_data);
+     match get_homecoachs_data(&client, &token, &timeout ).await {
+         Err( e ) => log::error!("Failed to get homecoachs data : {:?}", e),
+         Ok( data ) => {
+             for d in data.body.devices {
+                 println!("data from {}", d.station_name);
+                 if let Some( dashboard_data ) = d.dashboard_data {
+                     println!("    {}", dashboard_data);
+                 }
+                 else {
+                     println!("    Missing....");
+                 }
+             };
+         },
      };
 
 

@@ -5,7 +5,13 @@ use tokio::task::JoinError;
 
 #[derive(Debug)]
 pub struct Error {
-  pub msg : String,
+    msg : String,
+}
+
+impl Error {
+pub fn new(msg : &str) -> Error {
+    Error { msg : String::from(msg) }
+}
 }
 
 impl From<Error> for String {
