@@ -1,41 +1,12 @@
 use reqwest;
-use serde::{Serialize, Deserialize};
-use confy;
+use serde::Deserialize;
 use std::time::{Duration, Instant};
 
 use super::data::*;
-
-#[derive(Debug)]
-pub struct Error {
-  pub msg : String,
-}
-
-impl From<Error> for String {
-  fn from(e : Error) -> String {
-    e.msg
-  }
-}
-
-impl From<reqwest::Error> for Error {
-  fn from(e : reqwest::Error) -> Error {
-    Error { msg : format!("{:?}", e) }
-  }
-}
-
-impl From<String> for Error {
-  fn from(e : String) -> Error {
-    Error { msg : e }
-  }
-}
-
-impl From<confy::ConfyError> for Error {
-  fn from(e : confy::ConfyError) -> Error {
-    Error { msg : format!("{:?}", e) }
-  }
-}
+use super::errors::*;
 
 #[derive(Deserialize, Debug)]
-struct AccessTokenJSON {
+pub struct AccessTokenJSON {
   access_token : String,
   refresh_token : String,
   expires_in : i32,
@@ -48,23 +19,7 @@ pub struct AccessToken {
   pub expires_at : Instant,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ConnectConfig {
-    client_id: String,
-    client_secret: String,
-    username: String,
-    password: String,
-}
-
-/// Default for initial save ;)
-impl ::std::default::Default for ConnectConfig  {
-    fn default() -> Self {
-     Self { client_id: "cliend_id".into(), client_secret : "client_secret".into(),
-                username : "username".into(), password : "password".into() }
-    }
-}
-
-fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
+pub fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
   if token.expires_in < 0 {
     return Err( Error::from( format!("received expires_in field in AccessToken is negative!: {}", token.expires_in ) ) );
   }
@@ -74,19 +29,21 @@ fn convert_token(token : AccessTokenJSON) -> Result<AccessToken, Error> {
   Ok( AccessToken{ access_token : token.access_token, refresh_token : token.refresh_token, expires_at } )
 }
 
-async fn apply_timeout_and_send(mut build : reqwest::RequestBuilder, timeout : &Option<Duration>) -> Result<reqwest::Response, Error>
+pub async fn apply_timeout_and_send(mut build : reqwest::RequestBuilder, timeout : &Option<Duration>) -> Result<reqwest::Response, Error>
 {
     if let Some( d ) = timeout {
         build = build.timeout(*d);
     }
     let res = build.send().await?;
     if ! res.status().is_success()  {
-        return Err( Error::from( format!("unsuccesseful status: {}", res.status() ) ) );
+        return Err( Error::from( format!("Failed to send request. status: {} tex: {}", res.status(), res.text().await? ) ) );
     }
     Ok( res )
 }
 
-pub async fn get_access_token(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>)
+
+
+pub async fn get_client_access_token(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>)
   -> Result<AccessToken, Error> {
 
   let params = [("grant_type", "password"),
@@ -137,17 +94,15 @@ pub async fn get_fresh_token(client : &reqwest::Client, cfg : &ConnectConfig, ol
 }
 
 pub async fn get_homecoachs_data(client : &reqwest::Client, token : &AccessToken, timeout : &Option<Duration>)
-  -> Result<HomeCoachsData, Error> {
+  -> Result<HomeCoachsData, Error>
+{
+    let build = client.get("https://api.netatmo.com/api/gethomecoachsdata")
+        .header("Authorization", String::from("Bearer ") + &token.access_token)
+        .header("accept", "application/json");
 
-  //let params = [("device_id", "04255185")];
-  let build = client.get("https://api.netatmo.com/api/gethomecoachsdata")
-    .header("Authorization", String::from("Bearer ") + &token.access_token)
-    .header("accept", "application/json");
+    let res = apply_timeout_and_send(build, timeout).await?;
 
-  let res = apply_timeout_and_send(build, timeout).await?;
+    let res = res.json::<HomeCoachsData>().await?;
 
-   let res = res.json::<HomeCoachsData>().await?;
-
-   Ok( res )
+    Ok( res )
 }
-

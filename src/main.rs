@@ -3,19 +3,22 @@ use tokio;
 use chrono::naive::NaiveDateTime;
 use confy;
 use std::time::{Duration, Instant};
+use env_logger;
 
 use netatmo_connect::*;
 
 #[tokio::main]
 async fn main() {
+  env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+
   if let Err( e ) =  main_wrapped().await {
-    println!("Error : {:?}", e);
+    println!("Exit: {:?}", e);
   }
 }
 
 async fn main_wrapped() -> Result<(), Error> {
 
-  println!("Configuration path: {:?}", confy::get_configuration_file_path("connect-config", None) );
+  log::info!("Configuration path: {:?}", confy::get_configuration_file_path("connect-config", None) );
 
   let cfg  = confy::load("connect-config", None)?;
 
@@ -23,10 +26,13 @@ async fn main_wrapped() -> Result<(), Error> {
 
   let client = reqwest::Client::new();
 
-  let mut token =  get_access_token(&client, &cfg, &timeout).await?;
+  let mut token =  authorize(&client, &cfg, &Option::None).await?;
+
+
+  //get_client_access_token(&client, &cfg, &timeout).await?;
 
   let token_duration = token.expires_at - Instant::now();
-  println!("Access token expires in {:?}", token_duration);
+  log::info!("Access token expires in {:?}", token_duration);
 
   loop {
 
@@ -39,25 +45,33 @@ async fn main_wrapped() -> Result<(), Error> {
 
      let time_server = NaiveDateTime::from_timestamp_opt(res.time_server, 0);
      match time_server {
-       None => println!("Failed to convert server time to NaiveDateTime"),
-       Some( v ) => println!("server naive date time: {}", v),
+       None => log::error!("Failed to convert server time to NaiveDateTime"),
+       Some( v ) => log::info!("server naive date time: {}", v),
      };
 
      for d in res.body.devices {
        println!("data from device id : {}", d._id);
-       println!("{}", d.dashboard_data);
+       println!("    {}", d.dashboard_data);
        for m in d.modules {
-         println!("  with module : {}", m._id);
-         println!("      Battery : {}%", m.battery_percent);
-         println!("      data : {}", m.dashboard_data);
+         println!("    with module : {}", m._id);
+         println!("        Battery : {}%", m.battery_percent);
+         println!("        data : {}", m.dashboard_data);
        }
      };
 
-     let hc_data = get_homecoachs_data(&client, &token, &timeout ).await?;
-
-     for d in hc_data.body.devices {
-         println!("data from {}", d.station_name);
-         println!("{}", d.dashboard_data);
+     match get_homecoachs_data(&client, &token, &timeout ).await {
+         Err( e ) => log::error!("Failed to get homecoachs data : {:?}", e),
+         Ok( data ) => {
+             for d in data.body.devices {
+                 println!("data from {}", d.station_name);
+                 if let Some( dashboard_data ) = d.dashboard_data {
+                     println!("    {}", dashboard_data);
+                 }
+                 else {
+                     println!("    Missing....");
+                 }
+             };
+         },
      };
 
 
