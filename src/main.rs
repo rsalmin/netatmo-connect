@@ -4,19 +4,30 @@ use chrono::naive::NaiveDateTime;
 use confy;
 use std::time::{Duration, Instant};
 use env_logger;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use netatmo_connect::*;
 
 #[tokio::main]
 async fn main() {
-  env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
 
-  if let Err( e ) =  main_wrapped().await {
-    println!("Exit: {:?}", e);
-  }
+    let stop_flag = Arc::new(AtomicBool::new(false));
+
+    let stop_flag_clone = stop_flag.clone();
+    ctrlc::set_handler( move || {
+        log::info!("received Ctrl+C! finishing...");
+        stop_flag_clone.store(true, Ordering::Relaxed);
+      })
+      .expect("Error setting Ctrl-C handler");
+
+    if let Err( e ) =  main_wrapped(stop_flag).await {
+        log::error!("Exit: {:?}", e);
+    }
 }
 
-async fn main_wrapped() -> Result<(), Error> {
+async fn main_wrapped(stop_flag : Arc<AtomicBool>) -> Result<(), Error> {
 
   log::info!("Configuration path: {:?}", confy::get_configuration_file_path("connect-config", None) );
 
@@ -34,7 +45,7 @@ async fn main_wrapped() -> Result<(), Error> {
   let token_duration = token.expires_at - Instant::now();
   log::info!("Access token expires in {:?}", token_duration);
 
-  loop {
+  'main_loop: loop {
 
     if token.expires_at < Instant::now() {
       println!("Access token is expired!!!");
@@ -79,10 +90,15 @@ async fn main_wrapped() -> Result<(), Error> {
        println!("Access token is expired!!!");
      }
 
+    for _ in 0..60 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        if stop_flag.load(Ordering::Relaxed) {
+            break 'main_loop;
+        }
+    };
+  };
 
-     tokio::time::sleep(Duration::from_secs(60)).await;
-   };
-
-   //Ok(())
+    log::info!("finished succesefully");
+    Ok(())
 }
 
