@@ -1,6 +1,3 @@
-use reqwest;
-use confy;
-use url;
 use tokio::task::JoinError;
 
 #[derive(Debug)]

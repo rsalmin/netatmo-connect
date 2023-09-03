@@ -1,9 +1,5 @@
-use reqwest;
-use tokio;
 use chrono::naive::NaiveDateTime;
-use confy;
 use std::time::{Duration, Instant};
-use env_logger;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

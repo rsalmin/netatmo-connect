@@ -1,7 +1,5 @@
-use reqwest;
 use serde::Deserialize;
 use std::time::Duration;
-use webbrowser;
 use actix_web::{get, web, App, HttpServer};
 use actix_web::{HttpResponse, Responder};
 use actix_web::dev::ServerHandle;
@@ -69,7 +67,7 @@ async fn wait_for_response_web_task(data : Arc<RwLock<SharedWebData>>) -> Result
     }
 
     //run server
-    let () = server.await?;
+    server.await?;
 
     Ok( data.read()?.code.clone() )
 }
