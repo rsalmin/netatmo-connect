@@ -27,6 +27,8 @@ struct SharedWebData {
 #[get("/api/authorization_response")]
 async fn authorization_response_handler(params : web::Query<AuthRespParams>, data : web::Data<Arc<RwLock<SharedWebData>>>) -> impl Responder {
 
+    log::debug!("Authorization response handler");
+
     if let Ok( data ) = data.read() {
         if data.state != params.state {
             return HttpResponse::Unauthorized().reason("state string is not matching").finish();
@@ -111,7 +113,10 @@ async fn get_code_string(cfg : &ConnectConfig) -> Result<String, Error>
     webbrowser::open(url.as_str())?;
 
     wait_handle.await??;
-    ws_handle.await?
+    log::debug!("wait process finished");
+    let r = ws_handle.await??;
+    log::debug!("web server process finished");
+    Ok(r)
 }
 
 pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout : &Option<Duration>) -> Result<AccessToken, Error>
@@ -124,13 +129,12 @@ pub async fn authorize(client : &reqwest::Client, cfg : &ConnectConfig, timeout 
                             ("client_id", &cfg.client_id),
                             ("client_secret", &cfg.client_secret),
                             ("code", &code_string),
+                            ("redirect_uri", &String::from("http://localhost:8000/api/authorization_response")),
                             ("scope", "read_station read_homecoach")];
 
   let build = client.post("https://api.netatmo.com/oauth2/token").form(&params);
 
   let res = apply_timeout_and_send(build, timeout).await?;
-
-  //println!("authorization reply: {} {}", res.status(), res.text().await?);
 
   let res = res.json::<AccessTokenJSON>().await?;
 

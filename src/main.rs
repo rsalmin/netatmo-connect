@@ -3,11 +3,14 @@ use tokio;
 use chrono::naive::NaiveDateTime;
 use confy;
 use std::time::{Duration, Instant};
+use env_logger;
 
 use netatmo_connect::*;
 
 #[tokio::main]
 async fn main() {
+  env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+
   if let Err( e ) =  main_wrapped().await {
     println!("Exit: {:?}", e);
   }
@@ -15,7 +18,7 @@ async fn main() {
 
 async fn main_wrapped() -> Result<(), Error> {
 
-  println!("Configuration path: {:?}", confy::get_configuration_file_path("connect-config", None) );
+  log::info!("Configuration path: {:?}", confy::get_configuration_file_path("connect-config", None) );
 
   let cfg  = confy::load("connect-config", None)?;
 
@@ -29,7 +32,7 @@ async fn main_wrapped() -> Result<(), Error> {
   //get_client_access_token(&client, &cfg, &timeout).await?;
 
   let token_duration = token.expires_at - Instant::now();
-  println!("Access token expires in {:?}", token_duration);
+  log::info!("Access token expires in {:?}", token_duration);
 
   loop {
 
